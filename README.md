@@ -66,8 +66,8 @@ azure_github/
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd azure_github
+git clone https://github.com/nekoconer/Azure-SharePoint-AI-Search.git
+cd Azure-SharePoint-AI-Search
 ```
 
 2. Install dependencies using uv (recommended) or pip:
@@ -284,8 +284,8 @@ azure_github/
 
 1. 克隆仓库：
 ```bash
-git clone <repository-url>
-cd azure_github
+git clone https://github.com/nekoconer/Azure-SharePoint-AI-Search.git
+cd Azure-SharePoint-AI-Search
 ```
 
 2. 使用 uv（推荐）或 pip 安装依赖：
@@ -502,8 +502,8 @@ azure_github/
 
 1. リポジトリをクローン：
 ```bash
-git clone <repository-url>
-cd azure_github
+git clone https://github.com/nekoconer/Azure-SharePoint-AI-Search.git
+cd Azure-SharePoint-AI-Search
 ```
 
 2. uv（推奨）またはpipを使用して依存関係をインストール：
