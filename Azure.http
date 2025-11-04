@@ -1,0 +1,241 @@
+@service_name     = xxx
+@api_key          = xxx
+@data_source_name = xxx
+@site_url         = xxx
+@app_id           = xxx
+@client_secret    = xxx
+@tenant_id        = xxx
+@index-name = xxx
+@indexer-name = xxx
+@embedding_key = xxx
+@skillset-name = xxx
+@azure_openai_endpoint = xxx
+
+### Create a Data Source for a SharePoint Site / Library
+POST https://{{service_name}}.search.windows.net/datasources?api-version=2024-05-01-preview
+Content-Type: application/json
+api-key: {{api_key}}
+
+{
+    "name" : "{{data_source_name}}",
+    "type" : "sharepoint",
+    "credentials": {
+  "connectionString": "SharePointOnlineEndpoint={{site_url}};ApplicationId={{app_id}};ApplicationSecret={{client_secret}};TenantId={{tenant_id}}"
+},
+    "container" : { "name" : "defaultSiteLibrary", "query" : null }
+}
+### create an index
+POST https://{{service_name}}.search.windows.net/indexes?api-version=2024-07-01
+Content-Type: application/json
+api-key: {{api_key}}
+
+{
+  "name": "{{index-name}}",
+  "fields": [
+    { "name": "id", "type": "Edm.String", "key": true, "searchable": false },
+    { "name": "title", "type": "Edm.String", "searchable": true },
+    { "name": "content", "type": "Edm.String", "searchable": true },
+    { "name": "language", "type": "Edm.String", "searchable": false },
+
+    { "name": "chunk_text", "type": "Collection(Edm.String)", "searchable": true },
+    {
+      "name": "chunk_vector",
+      "type": "Collection(Edm.Single)",
+      "searchable": true,
+      "retrievable": true,
+      "dimensions": 1536,
+      "vectorSearchProfile": "vector-profile-1"
+    }
+  ],
+  "vectorSearch": {
+     "compressions": [
+         {
+             "name": "scalar-quantization",
+             "kind": "scalarQuantization",
+             "rerankWithOriginalVectors": true,
+             "defaultOversampling": 10.0,
+                 "scalarQuantizationParameters": {
+                     "quantizedDataType": "int8"
+                 }
+         },
+         {
+             "name": "binary-quantization",
+             "kind": "binaryQuantization",
+             "rerankWithOriginalVectors": true,
+             "defaultOversampling": 10.0
+         }
+     ],
+     "algorithms": [
+         {
+             "name": "hnsw-1",
+             "kind": "hnsw",
+             "hnswParameters": {
+                 "m": 4,
+                 "efConstruction": 400,
+                 "efSearch": 500,
+                 "metric": "cosine"
+             }
+         },
+         {
+             "name": "hnsw-2",
+             "kind": "hnsw",
+             "hnswParameters": {
+                 "m": 8,
+                 "efConstruction": 800,
+                 "efSearch": 800,
+                 "metric": "hamming"
+             }
+         },
+         {
+             "name": "eknn",
+             "kind": "exhaustiveKnn",
+             "exhaustiveKnnParameters": {
+                 "metric": "euclidean"
+             }
+         }
+
+     ],
+     "profiles": [
+       {
+         "name": "vector-profile-1",
+         "compression": "scalar-quantization",
+         "algorithm": "hnsw-1"
+       }
+     ]
+ }
+}
+
+
+### create a skillset
+PUT https://{{service_name}}.search.windows.net/skillsets/sharepoint-skillset?api-version=2024-07-01
+Content-Type: application/json  
+api-key: {{api_key}}
+
+{
+  "name": "sharepoint-skillset",
+  "description": "Extract text and compute embeddings",
+  "skills": [
+    {
+      "@odata.type": "#Microsoft.Skills.Text.V3.EntityLinkingSkill",
+      "name": "entitySkill",
+      "inputs": [{ "name": "text", "source": "/document/content" }],
+      "outputs": [{ "name": "entities", "targetName": "entities" }]
+    },
+    {
+      "@odata.type": "#Microsoft.Skills.Text.SplitSkill",
+      "name": "textSplit",
+      "description": "Split document into chunks",
+      "context": "/document",
+      "defaultLanguageCode": "ja",
+      "textSplitMode": "pages",
+      "maximumPageLength": 1024,
+      "pageOverlapLength": 256,
+      "inputs": [
+        { "name": "text", "source": "/document/content" },
+        { "name": "languageCode", "source": "/document/language" }
+      ],
+      "outputs": [
+        { "name": "textItems", "targetName": "chunks" }
+      ]
+    },
+    {
+      "@odata.type": "#Microsoft.Skills.Text.AzureOpenAIEmbeddingSkill",
+      "name":"embeddingSkill",
+      "description": "Generate embeddings",
+      "context": "/document/chunks/*",
+      "resourceUri": "{{azure_openai_endpoint}}",
+      "apikey":"{{embedding_key}}",
+      "deploymentId": "text-embedding-3-large",
+      "modelName": "text-embedding-3-large",
+      "dimensions": 1536,
+      "inputs": [ { "name": "text", "source": "/document/chunks/*" } ]
+    }
+  ],
+  "knowledgeStore": null
+}
+### create an indexer
+POST https://{{service_name}}.search.windows.net/indexers?api-version=2024-07-01
+Content-Type: application/json
+api-key: {{api_key}}
+
+{
+  "name": "{{indexer-name}}",
+  "dataSourceName": "{{data_source_name}}",
+  "targetIndexName": "{{index-name}}",
+  "skillsetName": "{{skillset-name}}",
+  "schedule": {
+    "interval": "PT12H",
+    "startTime": "2025-06-19T00:00:00Z"
+  },
+  "parameters": {
+    "batchSize": null,
+    "maxFailedItems": null,
+    "maxFailedItemsPerBatch": null,
+    "base64EncodeKeys": null,
+    "configuration": {
+      "indexedFileNameExtensions": ".pdf, .docx, .txt,.doc",
+      "excludedFileNameExtensions": ".png, .jpg",
+      "dataToExtract": "contentAndMetadata",
+      "failOnUnsupportedContentType": false,
+      "failOnUnprocessableDocument": false
+    }
+  },
+  "fieldMappings": [
+    {
+      "sourceFieldName": "metadata_spo_site_library_item_id",
+      "targetFieldName": "id",
+      "mappingFunction": { "name": "base64Encode" }
+    },
+    {
+      "sourceFieldName": "metadata_spo_item_title",
+      "targetFieldName": "title",
+      "mappingFunction": null
+    },
+    {
+      "sourceFieldName": "metadata_spo_item_language",
+      "targetFieldName": "language",
+      "mappingFunction": null
+    },
+    {
+      "sourceFieldName": "content",
+      "targetFieldName": "content",
+      "mappingFunction": null
+    }
+  ],
+  "outputFieldMappings": [
+  {
+    "sourceFieldName": "/document/chunks/*",
+    "targetFieldName": "chunk_text"
+  },
+  {
+    "sourceFieldName": "/document/chunks/*/chunk_embedding",
+    "targetFieldName": "chunk_vector"
+  }
+  ]
+}
+
+###提问检索
+POST https://{{service_name}}.search.windows.net/indexes/sharepoint-index/docs/search?api-version=2024-07-01
+api-key: {{api_key}}
+Content-Type: application/json
+
+{
+  "search": "経費",
+  "searchMode": "all",
+  "queryType": "simple"
+}
+###手动增量更新
+POST https://{{service_name}}.search.windows.net/indexers/{{indexer-name}}/run?api-version=2024-07-01
+api-key: {{api_key}}
+
+###
+POST https://graph.microsoft.com/v1.0/subscriptions
+Content-Type: application/json
+
+{
+  "changeType": "created,updated,deleted",
+  "notificationUrl": "https://你的域名/api/notify",
+  "resource": "/drives/{driveId}/root",
+  "expirationDateTime": "2025-07-30T23:59:59Z",
+  "clientState": "任意自定义值"
+}

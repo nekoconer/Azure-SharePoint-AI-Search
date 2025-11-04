@@ -1,0 +1,14 @@
+[project]
+name = "azure-github"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "azure-search-documents>=11.6.0",
+    "fastapi>=0.121.0",
+    "openai>=2.7.0",
+    "pyngrok>=7.4.1",
+    "python-dotenv>=1.2.1",
+    "uvicorn>=0.38.0",
+]
